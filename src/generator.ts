@@ -346,11 +346,22 @@ export function generateRootIndexFile(parsed: ParsedTypes): string {
 /**
  * Generate all content types and templates in a single file
  */
-export function generateSingleFile(parsed: ParsedTypes): string {
+export function generateSingleFile(parsed: ParsedTypes, withRegistry: boolean = false): string {
   const lines: string[] = [];
 
   // Import statement
-  lines.push("import { contentType, displayTemplate } from '@optimizely/cms-sdk';");
+  if (withRegistry) {
+    lines.push('import {');
+    lines.push('  contentType,');
+    lines.push('  displayTemplate,');
+    lines.push('  initContentTypeRegistry,');
+    lines.push('  initDisplayTemplateRegistry,');
+    lines.push('  BlankExperienceContentType,');
+    lines.push('  BlankSectionContentType,');
+    lines.push("} from '@optimizely/cms-sdk';");
+  } else {
+    lines.push("import { contentType, displayTemplate } from '@optimizely/cms-sdk';");
+  }
   lines.push('');
 
   // Build dependency order
@@ -406,6 +417,72 @@ export function generateSingleFile(parsed: ParsedTypes): string {
         lines.push('');
       }
     }
+  }
+
+  // Add registry section if requested
+  if (withRegistry) {
+    lines.push('// ' + '='.repeat(76));
+    lines.push('// Registry');
+    lines.push('// ' + '='.repeat(76));
+    lines.push('');
+
+    // Collect all constant names
+    const contentTypeNames: string[] = [];
+    const templateNames: string[] = [];
+
+    for (const category of categories) {
+      for (const key of byCategory[category]) {
+        contentTypeNames.push(toConstantName(key));
+      }
+    }
+
+    for (const template of parsed.displayTemplates) {
+      if (parsed.contentTypes.has(template.contentType)) {
+        templateNames.push(toConstantName(template.key, 'DisplayTemplate'));
+      }
+    }
+
+    // All content types array
+    lines.push('/**');
+    lines.push(' * Array of all content types for registry initialization');
+    lines.push(' */');
+    lines.push('export const allContentTypes = [');
+    lines.push('  // Built-in experience types');
+    lines.push('  BlankExperienceContentType,');
+    lines.push('  BlankSectionContentType,');
+    for (const category of categories) {
+      const keys = byCategory[category];
+      if (keys.length > 0) {
+        lines.push(`  // ${category.charAt(0).toUpperCase() + category.slice(1)}`);
+        for (const key of keys) {
+          lines.push(`  ${toConstantName(key)},`);
+        }
+      }
+    }
+    lines.push('];');
+    lines.push('');
+
+    // All display templates array
+    lines.push('/**');
+    lines.push(' * Array of all display templates for registry initialization');
+    lines.push(' */');
+    lines.push('export const allDisplayTemplates = [');
+    for (const name of templateNames) {
+      lines.push(`  ${name},`);
+    }
+    lines.push('];');
+    lines.push('');
+
+    // Init function
+    lines.push('/**');
+    lines.push(' * Initialize all registries');
+    lines.push(' * Call this in your root layout before rendering CMS content');
+    lines.push(' */');
+    lines.push('export function initAllRegistries() {');
+    lines.push('  initContentTypeRegistry(allContentTypes);');
+    lines.push('  initDisplayTemplateRegistry(allDisplayTemplates);');
+    lines.push('}');
+    lines.push('');
   }
 
   return lines.join('\n');
@@ -545,7 +622,7 @@ export function generate(parsed: ParsedTypes, options: GeneratorOptions): void {
   if (singleFile) {
     // Single file mode
     ensureDir(path.dirname(outdir));
-    const code = generateSingleFile(parsed);
+    const code = generateSingleFile(parsed, withRegistry);
     fs.writeFileSync(outdir, code, 'utf-8');
     console.log(`Generated: ${outdir}`);
     return;
