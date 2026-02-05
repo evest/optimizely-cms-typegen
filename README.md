@@ -1,6 +1,6 @@
 # optimizely-cms-typegen
 
-Generate TypeScript `contentType()` and `displayTemplate()` definitions from Optimizely CMS `types.json` files.
+Generate TypeScript `contentType()` and `displayTemplate()` definitions from Optimizely SaaS CMS content definitions.
 
 ## Installation
 
@@ -9,6 +9,13 @@ npm install optimizely-cms-typegen
 ```
 
 ## Usage
+
+You have to install the Optimizely CMS CLI first to generate a JSON file with all the content types in it. This is probably already in your frontend project, if not [see the installation docs](https://github.com/episerver/content-js-sdk/blob/main/docs/1-installation.md)
+
+Pull the content types:
+```bash
+npx @optimizely/cms-cli@latest pull --output types.json
+```
 
 ### Multi-file Output (Default)
 

@@ -22,6 +22,7 @@ export interface GeneratorOptions {
   outdir: string;
   singleFile?: boolean;
   withRegistry?: boolean;
+  verboseGeneration?: boolean;
 }
 
 interface ImportInfo {
@@ -99,12 +100,27 @@ function serializeValue(value: unknown, baseIndent: number = 0): string {
 // ============================================================================
 
 /**
+ * Check if a property value is a default that should be omitted in non-verbose mode
+ */
+function isDefaultPropertyValue(key: string, value: unknown): boolean {
+  if (key === 'sortOrder' && value === 0) return true;
+  if (key === 'maxLength' && value === 255) return true;
+  if (key === 'allowedTypes' && Array.isArray(value) && value.length === 0) return true;
+  if (key === 'restrictedTypes' && Array.isArray(value) && value.length === 0) return true;
+  if (key === 'localized' && value === false) return true;
+  if (key === 'required' && value === false) return true;
+  if (key === 'group' && value === 'content') return true;
+  return false;
+}
+
+/**
  * Build a property object with component reference handling
  */
 function buildPropertyObject(
   prop: PropertyDefinition,
   parsed: ParsedTypes,
-  componentRefs: Map<string, ImportInfo>
+  componentRefs: Map<string, ImportInfo>,
+  verboseGeneration: boolean = false
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {};
 
@@ -112,6 +128,10 @@ function buildPropertyObject(
   for (const [key, value] of Object.entries(prop)) {
     if (key === 'items' && prop.type === 'array' && prop.items?.type === 'component' && prop.items.contentType) {
       // Handle component reference in array items - will be handled specially
+      continue;
+    }
+    // Skip default values in non-verbose mode
+    if (!verboseGeneration && isDefaultPropertyValue(key, value)) {
       continue;
     }
     result[key] = value;
@@ -162,7 +182,8 @@ function replaceReferencePlaceholders(code: string): string {
 export function generateContentType(
   ct: CategorizedContentType,
   parsed: ParsedTypes,
-  componentRefs: Map<string, ImportInfo>
+  componentRefs: Map<string, ImportInfo>,
+  verboseGeneration: boolean = false
 ): string {
   const def = ct.definition;
 
@@ -188,7 +209,7 @@ export function generateContentType(
   if (def.properties && Object.keys(def.properties).length > 0) {
     const props: Record<string, unknown> = {};
     for (const [propName, propDef] of Object.entries(def.properties)) {
-      props[propName] = buildPropertyObject(propDef, parsed, componentRefs);
+      props[propName] = buildPropertyObject(propDef, parsed, componentRefs, verboseGeneration);
     }
     obj.properties = props;
   }
@@ -258,13 +279,14 @@ function generateJsDoc(ct: ContentTypeDefinition): string {
 export function generateFile(
   ct: CategorizedContentType,
   parsed: ParsedTypes,
-  templates: DisplayTemplateDefinition[]
+  templates: DisplayTemplateDefinition[],
+  verboseGeneration: boolean = false
 ): string {
   const componentRefs = new Map<string, ImportInfo>();
   const lines: string[] = [];
 
   // Generate content type code first to collect references
-  const ctCode = generateContentType(ct, parsed, componentRefs);
+  const ctCode = generateContentType(ct, parsed, componentRefs, verboseGeneration);
 
   // Generate imports
   lines.push("import { contentType, displayTemplate } from '@optimizely/cms-sdk';");
@@ -346,7 +368,11 @@ export function generateRootIndexFile(parsed: ParsedTypes): string {
 /**
  * Generate all content types and templates in a single file
  */
-export function generateSingleFile(parsed: ParsedTypes, withRegistry: boolean = false): string {
+export function generateSingleFile(
+  parsed: ParsedTypes,
+  withRegistry: boolean = false,
+  verboseGeneration: boolean = false
+): string {
   const lines: string[] = [];
 
   // Import statement
@@ -399,7 +425,7 @@ export function generateSingleFile(parsed: ParsedTypes, withRegistry: boolean = 
       const componentRefs = new Map<string, ImportInfo>();
 
       // Generate content type (refs are already defined above in single file mode)
-      const ctCode = generateContentType(ct, parsed, componentRefs);
+      const ctCode = generateContentType(ct, parsed, componentRefs, verboseGeneration);
 
       // Add JSDoc
       const jsDoc = generateJsDoc(ct.definition);
@@ -617,12 +643,12 @@ function ensureDir(dir: string): void {
  * Generate all output files
  */
 export function generate(parsed: ParsedTypes, options: GeneratorOptions): void {
-  const { outdir, singleFile, withRegistry } = options;
+  const { outdir, singleFile, withRegistry, verboseGeneration } = options;
 
   if (singleFile) {
     // Single file mode
     ensureDir(path.dirname(outdir));
-    const code = generateSingleFile(parsed, withRegistry);
+    const code = generateSingleFile(parsed, withRegistry, verboseGeneration);
     fs.writeFileSync(outdir, code, 'utf-8');
     console.log(`Generated: ${outdir}`);
     return;
@@ -644,7 +670,7 @@ export function generate(parsed: ParsedTypes, options: GeneratorOptions): void {
     for (const ct of types) {
       const fileName = `${ct.definition.key}.ts`;
       const filePath = path.join(categoryDir, fileName);
-      const code = generateFile(ct, parsed, parsed.displayTemplates);
+      const code = generateFile(ct, parsed, parsed.displayTemplates, verboseGeneration);
       fs.writeFileSync(filePath, code, 'utf-8');
       console.log(`Generated: ${filePath}`);
     }

@@ -20,6 +20,7 @@ program
   .option('--output <path>', 'Output file path (implies --single-file)')
   .option('--single-file', 'Generate all types in a single file')
   .option('--with-registry', 'Generate registry initialization file')
+  .option('--verbose-generation', 'Include default property values in generated output')
   .action((options) => {
     try {
       const inputPath = path.resolve(options.input);
@@ -43,6 +44,7 @@ program
         outdir,
         singleFile,
         withRegistry: options.withRegistry,
+        verboseGeneration: options.verboseGeneration,
       });
 
       console.log('');
