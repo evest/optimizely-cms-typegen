@@ -146,6 +146,34 @@ export function extractDependencies(properties: Record<string, PropertyDefinitio
 }
 
 // ============================================================================
+// Normalization
+// ============================================================================
+
+/**
+ * Normalize properties from array format to object format.
+ * Some JSON sources provide properties as an array of objects with a `name` field,
+ * while the generator expects an object keyed by property name.
+ */
+function normalizeProperties(
+  properties: Record<string, PropertyDefinition> | PropertyDefinition[] | undefined
+): Record<string, PropertyDefinition> | undefined {
+  if (!properties) return undefined;
+
+  if (Array.isArray(properties)) {
+    const result: Record<string, PropertyDefinition> = {};
+    for (const prop of properties) {
+      const { name, ...rest } = prop as PropertyDefinition & { name: string };
+      if (name) {
+        result[name] = rest as PropertyDefinition;
+      }
+    }
+    return Object.keys(result).length > 0 ? result : undefined;
+  }
+
+  return properties;
+}
+
+// ============================================================================
 // Main Parser
 // ============================================================================
 
@@ -167,6 +195,9 @@ export function parseTypesJson(inputPath: string): ParsedTypes {
 
   // Process content types
   for (const ct of data.contentTypes ?? []) {
+    // Normalize properties from array format to object format
+    ct.properties = normalizeProperties(ct.properties);
+
     const category = categorizeContentType(ct);
     if (category === null) {
       // Skip this content type (e.g., media types)

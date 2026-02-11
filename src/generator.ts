@@ -124,10 +124,14 @@ function buildPropertyObject(
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {};
 
-  // Copy all properties
+  // Copy all properties, skipping fields that will be handled specially
   for (const [key, value] of Object.entries(prop)) {
     if (key === 'items' && prop.type === 'array' && prop.items?.type === 'component' && prop.items.contentType) {
-      // Handle component reference in array items - will be handled specially
+      // Handle component reference in array items - will be handled specially below
+      continue;
+    }
+    if (key === 'contentType' && prop.type === 'component') {
+      // Handle direct component reference - will be handled specially below
       continue;
     }
     // Skip default values in non-verbose mode
@@ -135,6 +139,24 @@ function buildPropertyObject(
       continue;
     }
     result[key] = value;
+  }
+
+  // Handle direct component reference
+  if (prop.type === 'component' && prop.contentType) {
+    const refKey = prop.contentType as string;
+    const refCt = parsed.contentTypes.get(refKey);
+
+    if (refCt) {
+      const constantName = toConstantName(refKey);
+      componentRefs.set(refKey, {
+        constantName,
+        category: refCt.category,
+        fileName: refKey,
+      });
+      result.__contentTypeRef = constantName;
+    } else {
+      result.contentType = refKey;
+    }
   }
 
   // Handle array with component reference
